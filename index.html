@@ -1,0 +1,1503 @@
+<!DOCTYPE html>
+<html lang="de" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>C++ Doppelt Verkettete Liste – Interaktive Visualisierung</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        slate: {
+                            850: '#172033',
+                            950: '#0b1120',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Benutzerdefinierte Scrollbars für Code- und Canvas-Bereiche */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569; 
+        }
+
+        /* Sanfte Übergänge für Knoten und SVG-Pfeile */
+        .node-card {
+            transition: left 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+                        top 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+                        transform 0.45s cubic-bezier(0.22, 1, 0.36, 1), 
+                        opacity 0.35s ease, 
+                        box-shadow 0.3s ease,
+                        border-color 0.3s ease;
+        }
+        
+        .svg-arrow {
+            transition: d 0.45s cubic-bezier(0.22, 1, 0.36, 1), 
+                        stroke 0.3s ease, 
+                        stroke-width 0.3s ease,
+                        opacity 0.3s ease;
+        }
+
+        /* Pulsierender Effekt für den aktuell besuchten Knoten */
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.4); }
+            50% { box-shadow: 0 0 18px 4px rgba(56, 189, 248, 0.6); }
+        }
+        .node-highlight {
+            animation: pulseGlow 1.5s infinite;
+            border-color: #38bdf8 !important;
+        }
+
+        .node-danger {
+            box-shadow: 0 0 18px 4px rgba(244, 63, 94, 0.55) !important;
+            border-color: #f43f5e !important;
+        }
+
+        .node-new {
+            box-shadow: 0 0 18px 4px rgba(52, 211, 153, 0.55) !important;
+            border-color: #34d399 !important;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col selection:bg-sky-500/30">
+
+    <!-- Header & Steuerungsleiste -->
+    <header class="bg-slate-900 border-b border-slate-800 sticky top-0 z-30 shadow-lg">
+        <div class="max-w-[1600px] mx-auto px-4 py-3 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
+            
+            <!-- Titel & Badge -->
+            <div class="flex items-center gap-3">
+                <div class="bg-sky-500/10 border border-sky-500/30 p-2 rounded-xl text-sky-400">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+                    </svg>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-lg sm:text-xl font-bold tracking-tight text-white">C++ Doppelt Verkettete Liste</h1>
+                        <span class="text-xs font-mono bg-slate-800 text-sky-400 border border-slate-700 px-2 py-0.5 rounded-md">DoublyLinkedList</span>
+                    </div>
+                    <p class="text-xs text-slate-400">Interaktive Zeiger- &amp; Speicher-Visualisierung (<code class="text-slate-300">prev</code>, <code class="text-slate-300">data</code>, <code class="text-slate-300">next</code>)</p>
+                </div>
+            </div>
+
+            <!-- Aktions-Steuerung -->
+            <div class="flex flex-wrap items-center gap-2">
+                <!-- Wert-Eingabe -->
+                <div class="flex items-center bg-slate-950 border border-slate-700 rounded-xl p-1 focus-within:border-sky-500 transition-colors">
+                    <label for="nodeValueInput" class="text-xs font-mono text-slate-400 px-2">val =</label>
+                    <input id="nodeValueInput" type="number" value="42" min="-999" max="999" 
+                           class="w-14 bg-transparent text-white font-mono text-sm font-semibold focus:outline-none text-center"
+                           title="Zahlenwert für die Operation eingeben">
+                </div>
+
+                <!-- Index-Eingabe für Einfügen in der Mitte -->
+                <div class="flex items-center bg-slate-950 border border-slate-700 rounded-xl p-1 focus-within:border-indigo-500 transition-colors">
+                    <label for="nodeIndexInput" class="text-xs font-mono text-slate-400 px-2">idx =</label>
+                    <input id="nodeIndexInput" type="number" value="1" min="0" max="7" 
+                           class="w-12 bg-transparent text-indigo-300 font-mono text-sm font-semibold focus:outline-none text-center"
+                           title="Ziel-Index für insertAt(index, val) eingeben (0 = Anfang)">
+                </div>
+
+                <!-- Einfügen & Löschen Buttons -->
+                <button id="btnPushFront" onclick="handlePushFront()" 
+                        class="op-btn bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs sm:text-sm font-medium px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm">
+                    <span>+ Anfang</span>
+                    <code class="hidden sm:inline text-[11px] bg-emerald-700/70 px-1.5 py-0.5 rounded">push_front</code>
+                </button>
+
+                <button id="btnInsertAt" onclick="handleInsertAt()" 
+                        class="op-btn bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs sm:text-sm font-medium px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm"
+                        title="Knoten an der Position idx einfügen">
+                    <span>+ Position</span>
+                    <code class="hidden sm:inline text-[11px] bg-indigo-700/70 px-1.5 py-0.5 rounded">insertAt</code>
+                </button>
+
+                <button id="btnPushBack" onclick="handlePushBack()" 
+                        class="op-btn bg-sky-600 hover:bg-sky-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs sm:text-sm font-medium px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm">
+                    <span>+ Ende</span>
+                    <code class="hidden sm:inline text-[11px] bg-sky-700/70 px-1.5 py-0.5 rounded">push_back</code>
+                </button>
+
+                <button id="btnDelete" onclick="handleDeleteNode()" 
+                        class="op-btn bg-rose-600 hover:bg-rose-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs sm:text-sm font-medium px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm">
+                    <span>Löschen</span>
+                    <code class="hidden sm:inline text-[11px] bg-rose-700/70 px-1.5 py-0.5 rounded">deleteNode</code>
+                </button>
+
+                <div class="h-6 w-px bg-slate-800 hidden sm:block mx-0.5"></div>
+
+                <!-- Traversieren Buttons -->
+                <button id="btnTraverseForward" onclick="handleTraverseForward()" 
+                        class="op-btn bg-slate-800 hover:bg-slate-700 border border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-200 text-xs sm:text-sm font-medium px-3 py-2 rounded-xl transition flex items-center gap-1">
+                    <span>Vorwärts</span>
+                    <span class="text-sky-400 font-mono">→</span>
+                </button>
+
+                <button id="btnTraverseBackward" onclick="handleTraverseBackward()" 
+                        class="op-btn bg-slate-800 hover:bg-slate-700 border border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-200 text-xs sm:text-sm font-medium px-3 py-2 rounded-xl transition flex items-center gap-1">
+                    <span class="text-amber-400 font-mono">←</span>
+                    <span>Rückwärts</span>
+                </button>
+
+                <button id="btnReset" onclick="resetDemo()" 
+                        class="bg-slate-800/70 hover:bg-slate-700 border border-slate-700/80 text-slate-300 text-xs sm:text-sm font-medium px-3 py-2 rounded-xl transition"
+                        title="Standardliste [10, 25, 30] wiederherstellen">
+                    Zurücksetzen
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hauptbereich: 100% Breite ohne rechte Seitenleiste -->
+    <main class="flex-1 max-w-[1600px] w-full mx-auto p-4 flex flex-col gap-4">
+
+        <!-- Visuelle Darstellung & Schritt-Erklärung über die gesamte Breite -->
+        <section class="w-full flex flex-col gap-4 flex-1">
+            
+            <!-- Animations-Status & Playback-Leiste -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-md">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                        <span id="statusIndicator" class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                        <span id="operationTitle" class="text-xs font-mono uppercase tracking-wider text-slate-400 font-semibold">Bereit für Operation</span>
+                    </div>
+
+                    <!-- Modus & Geschwindigkeit -->
+                    <div class="flex flex-wrap items-center gap-3">
+                        <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none bg-slate-950 px-2.5 py-1.5 rounded-lg border border-slate-800">
+                            <input type="checkbox" id="stepModeToggle" class="accent-sky-500 rounded cursor-pointer">
+                            <span>Einzelschritt-Modus</span>
+                        </label>
+
+                        <div id="speedControlGroup" class="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
+                            <span class="text-xs text-slate-400">Tempo:</span>
+                            <select id="speedSelect" class="bg-transparent text-xs text-sky-400 font-medium focus:outline-none cursor-pointer">
+                                <option value="1800" class="bg-slate-900">Langsam</option>
+                                <option value="1000" selected class="bg-slate-900">Normal</option>
+                                <option value="450" class="bg-slate-900">Schnell</option>
+                            </select>
+                        </div>
+
+                        <button id="btnNextStep" onclick="triggerNextStep()" disabled
+                                class="bg-sky-600 hover:bg-sky-500 disabled:opacity-30 disabled:cursor-not-allowed text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition shadow-sm">
+                            Nächster Schritt ▶
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Visueller Speicher-Canvas (Heap / Knoten-Darstellung) -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-md flex-1 flex flex-col min-h-[420px]">
+                
+                <!-- Legende -->
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2 border-b border-slate-800/80 text-xs">
+                    <span class="font-semibold text-slate-300 flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-slate-500"></span>
+                        Arbeitsspeicher (Heap) &amp; Zeiger-Referenzen
+                    </span>
+                    <div class="flex flex-wrap items-center gap-4 text-slate-400">
+                        <span class="flex items-center gap-1.5">
+                            <span class="w-4 h-0.5 bg-sky-400 inline-block relative">
+                                <span class="w-1.5 h-1.5 border-t-2 border-r-2 border-sky-400 rotate-45 inline-block absolute -right-0.5 -top-[2px]"></span>
+                            </span>
+                            <code class="text-sky-400">next</code> (Vorwärts)
+                        </span>
+                        <span class="flex items-center gap-1.5">
+                            <span class="w-4 h-0.5 bg-amber-400 inline-block relative">
+                                <span class="w-1.5 h-1.5 border-b-2 border-l-2 border-amber-400 rotate-45 inline-block absolute -left-0.5 -top-[2px]"></span>
+                            </span>
+                            <code class="text-amber-400">prev</code> (Rückwärts)
+                        </span>
+                        <span class="flex items-center gap-1.5">
+                            <span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-mono text-[10px] border border-emerald-500/30">head</span>
+                            <span class="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 font-mono text-[10px] border border-purple-500/30">tail</span>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Scrollbarer Zeichenbereich -->
+                <div id="canvasScrollContainer" class="relative flex-1 bg-slate-950/70 border border-slate-800/80 rounded-xl overflow-x-auto overflow-y-hidden flex items-center select-none">
+                    <!-- Dynamische Bühnenfläche -->
+                    <div id="visualStage" class="relative h-[420px] min-w-full flex items-center justify-center">
+                        <!-- SVG Layer für Pfeile -->
+                        <svg id="arrowsSvg" class="absolute inset-0 w-full h-full pointer-events-none z-10 overflow-visible">
+                            <defs>
+                                <!-- Pfeilspitze für next (Blau) -->
+                                <marker id="arrow-next" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                    <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#38bdf8" />
+                                </marker>
+                                <!-- Pfeilspitze für prev (Amber/Orange) -->
+                                <marker id="arrow-prev" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                    <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#fbbf24" />
+                                </marker>
+                                <!-- Pfeilspitze für head (Smaragd) -->
+                                <marker id="arrow-head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                    <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#34d399" />
+                                </marker>
+                                <!-- Pfeilspitze für tail (Violett) -->
+                                <marker id="arrow-tail" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                    <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#c084fc" />
+                                </marker>
+                                <!-- Pfeilspitze für nullptr (Grau) -->
+                                <marker id="arrow-null" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                                    <path d="M 0 2 L 8 5 L 0 8 z" fill="#64748b" />
+                                </marker>
+                            </defs>
+                            <g id="arrowsLayer"></g>
+                        </svg>
+
+                        <!-- HTML Layer für Knoten-Boxen, head/tail Badges und nullptr -->
+                        <div id="nodesLayer" class="absolute inset-0 z-20"></div>
+                    </div>
+                </div>
+
+                <!-- Kompakte Speicher-Zusammenfassung unten -->
+                <div class="mt-3 pt-2.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-slate-400">
+                    <div>
+                        <span>Anzahl Knoten: </span>
+                        <span id="nodeCountDisplay" class="text-white font-semibold">3</span>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <span>head: <span id="headAddrDisplay" class="text-emerald-400">0x100</span></span>
+                        <span>tail: <span id="tailAddrDisplay" class="text-purple-400">0x308</span></span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Message Toast (Ersatz für alert()) -->
+    <div id="toastMessage" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 text-sm">
+        <span id="toastIcon" class="text-amber-400">⚠️</span>
+        <span id="toastText">Hinweis</span>
+    </div>
+
+    <script>
+        /**
+         * ============================================================================
+         * 1. GLOBALE ZUSTANDSVARIABLEN & SPEICHER-SIMULATION
+         * ============================================================================
+         */
+        const NODE_WIDTH = 176;
+        const NODE_HEIGHT = 86;
+        const NODE_GAP = 56;
+        const NULL_WIDTH = 66;
+
+        let nodes = [];
+        let headId = null;
+        let tailId = null;
+        let stagingNode = null;
+        let newlyInsertedNodeId = null;
+        let highlightedNodeId = null;
+        let dangerNodeId = null;
+        let pointerLabel = null;
+
+        let isAnimating = false;
+        let stepResolve = null;
+        let idCounter = 1;
+        let nextMemCounter = 0x100;
+
+        function allocateAddress() {
+            const addr = '0x' + nextMemCounter.toString(16).toUpperCase();
+            nextMemCounter += 0x18;
+            return addr;
+        }
+
+        /**
+         * Aktualisiert den Status-Indikator und die aktuelle Schritt-Überschrift
+         */
+        function setStepInfo(badge, text, subtext = '', statusColor = 'bg-sky-400') {
+            const indicator = document.getElementById('statusIndicator');
+            if (indicator) {
+                indicator.className = `w-2.5 h-2.5 rounded-full ${statusColor}`;
+            }
+            const titleEl = document.getElementById('operationTitle');
+            if (titleEl && badge && badge !== 'BEREIT') {
+                const baseTitle = titleEl.textContent.split(' • ')[0];
+                titleEl.textContent = `${baseTitle} • ${badge}`;
+            }
+        }
+
+        /**
+         * Zeigt eine dezente Toast-Nachricht (kein alert())
+         */
+        function showToast(message, icon = '⚠️') {
+            const toast = document.getElementById('toastMessage');
+            document.getElementById('toastText').textContent = message;
+            document.getElementById('toastIcon').textContent = icon;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        /**
+         * Pausiert die Animation entweder zeitgesteuert oder wartet auf Klick auf "Nächster Schritt"
+         */
+        function waitStep() {
+            const isStepMode = document.getElementById('stepModeToggle').checked;
+            const nextBtn = document.getElementById('btnNextStep');
+
+            if (isStepMode) {
+                nextBtn.disabled = false;
+                return new Promise(resolve => {
+                    stepResolve = () => {
+                        nextBtn.disabled = true;
+                        stepResolve = null;
+                        resolve();
+                    };
+                });
+            } else {
+                const delay = parseInt(document.getElementById('speedSelect').value, 10);
+                return new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+
+        function triggerNextStep() {
+            if (stepResolve) stepResolve();
+        }
+
+        // Umschalten zwischen Auto-Play und Einzelschritt-Modus während einer laufenden Animation
+        document.getElementById('stepModeToggle').addEventListener('change', (e) => {
+            const speedGroup = document.getElementById('speedControlGroup');
+            if (e.target.checked) {
+                speedGroup.classList.add('opacity-40', 'pointer-events-none');
+            } else {
+                speedGroup.classList.remove('opacity-40', 'pointer-events-none');
+                if (stepResolve) stepResolve(); // Falls gerade pausiert, fortsetzen
+            }
+        });
+
+        /**
+         * Aktiviert/Deaktiviert die Operations-Buttons während einer Animation
+         */
+        function setControlsDisabled(disabled) {
+            isAnimating = disabled;
+            document.querySelectorAll('.op-btn').forEach(btn => btn.disabled = disabled);
+        }
+
+        /**
+         * ============================================================================
+         * 3. VISUELLES RENDERING (Knoten, Speicheradressen & SVG-Zeiger)
+         * ============================================================================
+         */
+        function getNodeById(id) {
+            if (!id) return null;
+            if (stagingNode && stagingNode.id === id) return stagingNode;
+            return nodes.find(n => n.id === id) || null;
+        }
+
+        function renderVisualization() {
+            const stage = document.getElementById('visualStage');
+            const nodesLayer = document.getElementById('nodesLayer');
+            const arrowsLayer = document.getElementById('arrowsLayer');
+
+            // Zähler & Adressen in Fußzeile aktualisieren
+            document.getElementById('nodeCountDisplay').textContent = nodes.length;
+            const headObj = getNodeById(headId);
+            const tailObj = getNodeById(tailId);
+            document.getElementById('headAddrDisplay').textContent = headObj ? headObj.addr : 'nullptr';
+            document.getElementById('tailAddrDisplay').textContent = tailObj ? tailObj.addr : 'nullptr';
+
+            // Bühnenbreite dynamisch berechnen
+            const mainChainCount = Math.max(nodes.length, 1);
+            const totalContentWidth = NULL_WIDTH * 2 + mainChainCount * NODE_WIDTH + (mainChainCount + 1) * NODE_GAP + 80;
+            const containerWidth = document.getElementById('canvasScrollContainer').clientWidth;
+            const stageWidth = Math.max(containerWidth, totalContentWidth);
+            stage.style.width = `${stageWidth}px`;
+
+            // Start-X zentriert berechnen
+            const actualChainWidth = nodes.length === 0 
+                ? (NULL_WIDTH + 80) 
+                : (NULL_WIDTH * 2 + nodes.length * NODE_WIDTH + (nodes.length + 1) * NODE_GAP);
+            const startX = Math.max(30, (stageWidth - actualChainWidth) / 2);
+            const mainY = 215; // Vertikale Hauptlinie der Liste (Platz oben & unten für getrennte Außenbögen)
+
+            // Positionen aller Elemente berechnen
+            const positions = new Map();
+
+            if (nodes.length === 0) {
+                // Leere Liste: head & tail zeigen auf nullptr
+                positions.set('EMPTY_NULL', {
+                    x: startX + actualChainWidth / 2 - NULL_WIDTH / 2,
+                    y: mainY + 18,
+                    w: NULL_WIDTH,
+                    h: 36
+                });
+            } else {
+                // Linkes nullptr (für prev des ersten Knotens)
+                positions.set('LEFT_NULL', {
+                    x: startX,
+                    y: mainY + (NODE_HEIGHT - 34) / 2,
+                    w: NULL_WIDTH,
+                    h: 34
+                });
+
+                // Reguläre Knoten in der Kette
+                nodes.forEach((node, index) => {
+                    const nx = startX + NULL_WIDTH + NODE_GAP + index * (NODE_WIDTH + NODE_GAP);
+                    positions.set(node.id, {
+                        x: nx,
+                        y: mainY,
+                        w: NODE_WIDTH,
+                        h: NODE_HEIGHT
+                    });
+                });
+
+                // Rechtes nullptr (für next des letzten Knotens)
+                const lastNodeX = startX + NULL_WIDTH + NODE_GAP + (nodes.length - 1) * (NODE_WIDTH + NODE_GAP);
+                positions.set('RIGHT_NULL', {
+                    x: lastNodeX + NODE_WIDTH + NODE_GAP,
+                    y: mainY + (NODE_HEIGHT - 34) / 2,
+                    w: NULL_WIDTH,
+                    h: 34
+                });
+            }
+
+            // Position für den schwebenden neuen Knoten (stagingNode)
+            if (stagingNode) {
+                let sx = stageWidth / 2 - NODE_WIDTH / 2;
+                if (stagingNode.positionHint === 'front' && nodes.length > 0) {
+                    const firstPos = positions.get(nodes[0].id);
+                    sx = Math.max(20, firstPos.x - 60);
+                } else if (stagingNode.positionHint === 'back' && nodes.length > 0) {
+                    const lastPos = positions.get(nodes[nodes.length - 1].id);
+                    sx = Math.min(stageWidth - NODE_WIDTH - 20, lastPos.x + 60);
+                } else if (stagingNode.positionHint === 'middle' && typeof stagingNode.targetIndex === 'number' && nodes.length > 0) {
+                    const targetNode = nodes[stagingNode.targetIndex];
+                    const prevTargetNode = nodes[stagingNode.targetIndex - 1];
+                    if (targetNode && prevTargetNode && positions.has(targetNode.id) && positions.has(prevTargetNode.id)) {
+                        const prevPos = positions.get(prevTargetNode.id);
+                        const currPos = positions.get(targetNode.id);
+                        sx = (prevPos.x + currPos.x) / 2;
+                    } else if (targetNode && positions.has(targetNode.id)) {
+                        sx = positions.get(targetNode.id).x - 50;
+                    }
+                }
+                positions.set(stagingNode.id, {
+                    x: sx,
+                    y: 36, // Oben im Speicher allokiert mit großzügigem Abstand für überschneidungsfreie Pfeile
+                    w: NODE_WIDTH,
+                    h: NODE_HEIGHT
+                });
+            }
+
+            // HTML für Knoten & Badges aufbauen (mit bestehendem DOM abgleichen, damit CSS-Transitions auf left/top greifen!)
+            const existingCards = new Map();
+            nodesLayer.querySelectorAll('.node-card[data-node-id]').forEach(el => {
+                existingCards.set(el.getAttribute('data-node-id'), el);
+            });
+
+            // Nicht-Knoten-Overlays (nullptr-Boxen, head/tail Badges, Zeiger-Labels) neu aufbauen
+            nodesLayer.querySelectorAll('.overlay-item').forEach(el => el.remove());
+
+            let overlayHtml = '';
+
+            // 1. Leere-Liste-Darstellung
+            if (nodes.length === 0) {
+                const nullPos = positions.get('EMPTY_NULL');
+                overlayHtml += `
+                    <div style="left:${nullPos.x}px; top:${nullPos.y}px; width:${nullPos.w}px; height:${nullPos.h}px;"
+                         class="overlay-item absolute flex items-center justify-center rounded-lg bg-slate-900 border border-dashed border-slate-600 font-mono text-xs text-slate-400">
+                        nullptr
+                    </div>
+                `;
+                // head & tail Badges über nullptr
+                overlayHtml += renderPointerBadge('head', nullPos.x - 24, nullPos.y - 54, 'emerald');
+                overlayHtml += renderPointerBadge('tail', nullPos.x + 34, nullPos.y - 54, 'purple');
+            } else {
+                // Linkes & rechtes nullptr
+                const leftNull = positions.get('LEFT_NULL');
+                const rightNull = positions.get('RIGHT_NULL');
+
+                overlayHtml += `
+                    <div style="left:${leftNull.x}px; top:${leftNull.y}px; width:${leftNull.w}px; height:${leftNull.h}px;"
+                         class="overlay-item absolute flex items-center justify-center rounded-lg bg-slate-900/90 border border-dashed border-slate-700 font-mono text-xs text-slate-500">
+                        nullptr
+                    </div>
+                    <div style="left:${rightNull.x}px; top:${rightNull.y}px; width:${rightNull.w}px; height:${rightNull.h}px;"
+                         class="overlay-item absolute flex items-center justify-center rounded-lg bg-slate-900/90 border border-dashed border-slate-700 font-mono text-xs text-slate-500">
+                        nullptr
+                    </div>
+                `;
+            }
+
+            // 2. Alle Knoten rendern oder sanft verschieben (reguläre + ggf. stagingNode)
+            const allNodesToRender = stagingNode ? [...nodes, stagingNode] : nodes;
+            const activeIds = new Set(allNodesToRender.map(n => n.id));
+
+            // Entfernte Knoten aus dem DOM löschen
+            existingCards.forEach((el, id) => {
+                if (!activeIds.has(id)) el.remove();
+            });
+
+            allNodesToRender.forEach(node => {
+                const pos = positions.get(node.id);
+                if (!pos) return;
+
+                const prevObj = getNodeById(node.prevId);
+                const nextObj = getNodeById(node.nextId);
+                const prevText = prevObj ? prevObj.addr : 'nullptr';
+                const nextText = nextObj ? nextObj.addr : 'nullptr';
+
+                let extraClasses = 'border-slate-700 bg-slate-900';
+                if (node.id === highlightedNodeId) extraClasses = 'node-highlight bg-slate-800';
+                if (node.id === dangerNodeId) extraClasses = 'node-danger bg-rose-950/40';
+                if ((stagingNode && node.id === stagingNode.id) || node.id === newlyInsertedNodeId) {
+                    extraClasses = 'node-new bg-emerald-950/30';
+                }
+
+                // Optionaler Index-Hinweis für reguläre Knoten
+                const chainIndex = nodes.findIndex(n => n.id === node.id);
+                const indexBadgeHtml = chainIndex !== -1
+                    ? `<span class="text-slate-500">[${chainIndex}]</span>`
+                    : `<span class="text-emerald-400">[neu]</span>`;
+
+                const innerCardHtml = `
+                    <!-- Obere Leiste: Speicheradresse & Index -->
+                    <div class="bg-slate-950/80 px-2.5 py-0.5 border-b border-slate-800 flex items-center justify-between text-[10px] font-mono">
+                        <span class="text-slate-400 flex items-center gap-1">Node ${indexBadgeHtml}</span>
+                        <span class="text-sky-300 font-semibold">${node.addr}</span>
+                    </div>
+                    <!-- 3 Felder: prev | data | next -->
+                    <div class="flex-1 grid grid-cols-12 divide-x divide-slate-800">
+                        <!-- prev -->
+                        <div class="col-span-4 flex flex-col items-center justify-center bg-amber-500/5 px-1">
+                            <span class="text-[9px] font-mono uppercase text-amber-400/80">prev</span>
+                            <span class="text-[10px] font-mono font-semibold ${prevObj ? 'text-amber-300' : 'text-slate-500'} truncate max-w-full">${prevText}</span>
+                        </div>
+                        <!-- data -->
+                        <div class="col-span-4 flex flex-col items-center justify-center bg-slate-800/40 px-1">
+                            <span class="text-[9px] font-mono uppercase text-slate-400">data</span>
+                            <span class="text-base font-mono font-bold text-white">${node.data}</span>
+                        </div>
+                        <!-- next -->
+                        <div class="col-span-4 flex flex-col items-center justify-center bg-sky-500/5 px-1">
+                            <span class="text-[9px] font-mono uppercase text-sky-400/80">next</span>
+                            <span class="text-[10px] font-mono font-semibold ${nextObj ? 'text-sky-300' : 'text-slate-500'} truncate max-w-full">${nextText}</span>
+                        </div>
+                    </div>
+                `;
+
+                let cardEl = existingCards.get(node.id);
+                if (!cardEl) {
+                    cardEl = document.createElement('div');
+                    cardEl.setAttribute('data-node-id', node.id);
+                    cardEl.style.left = `${pos.x}px`;
+                    cardEl.style.top = `${pos.y}px`;
+                    cardEl.style.width = `${pos.w}px`;
+                    cardEl.style.height = `${pos.h}px`;
+                    cardEl.className = `node-card absolute rounded-xl border-2 ${extraClasses} shadow-xl flex flex-col overflow-hidden`;
+                    cardEl.innerHTML = innerCardHtml;
+                    nodesLayer.appendChild(cardEl);
+                } else {
+                    cardEl.className = `node-card absolute rounded-xl border-2 ${extraClasses} shadow-xl flex flex-col overflow-hidden`;
+                    cardEl.innerHTML = innerCardHtml;
+                    // Position im nächsten Frame aktualisieren, damit CSS-Transition sanft abläuft
+                    requestAnimationFrame(() => {
+                        cardEl.style.left = `${pos.x}px`;
+                        cardEl.style.top = `${pos.y}px`;
+                        cardEl.style.width = `${pos.w}px`;
+                        cardEl.style.height = `${pos.h}px`;
+                    });
+                }
+            });
+
+            // 3. head & tail Badges rendern (wenn Liste nicht leer)
+            if (headObj && positions.has(headObj.id)) {
+                const hPos = positions.get(headObj.id);
+                // Wenn ein schwebender Knoten über dem ersten Knoten hängt, head etwas weiter links platzieren
+                let offsetX = (headId === tailId) ? -34 : 0;
+                if (stagingNode && stagingNode.positionHint === 'front') offsetX -= 36;
+                overlayHtml += renderPointerBadge('head', hPos.x + hPos.w / 2 - 28 + offsetX, hPos.y - 54, 'emerald');
+            }
+            if (tailObj && positions.has(tailObj.id)) {
+                const tPos = positions.get(tailObj.id);
+                let offsetX = (headId === tailId) ? 34 : 0;
+                if (stagingNode && stagingNode.positionHint === 'back') offsetX += 36;
+                overlayHtml += renderPointerBadge('tail', tPos.x + tPos.w / 2 - 28 + offsetX, tPos.y - 54, 'purple');
+            }
+
+            // 4. Optionaler Hilfszeiger (z. B. newNode oder curr)
+            if (stagingNode && positions.has(stagingNode.id)) {
+                const sPos = positions.get(stagingNode.id);
+                overlayHtml += `
+                    <div style="left:${sPos.x}px; top:${sPos.y - 24}px;"
+                         class="overlay-item absolute px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-mono text-[10px] font-bold">
+                        newNode (${stagingNode.addr})
+                    </div>
+                `;
+            }
+            if (pointerLabel && positions.has(pointerLabel.nodeId)) {
+                const pPos = positions.get(pointerLabel.nodeId);
+                overlayHtml += `
+                    <div style="left:${pPos.x + pPos.w / 2 - 28}px; top:${pPos.y + pPos.h + 44}px;"
+                         class="overlay-item absolute px-2.5 py-0.5 rounded-md bg-sky-500/20 border border-sky-400 text-sky-300 font-mono text-xs font-bold shadow">
+                        ↑ ${pointerLabel.name}
+                    </div>
+                `;
+            }
+
+            nodesLayer.insertAdjacentHTML('beforeend', overlayHtml);
+
+            // ========================================================================
+            // 5. SVG-PFEILE ZEICHNEN (Überschneidungsfreie Innen- & Außenbahnen)
+            // ========================================================================
+            let svgPaths = '';
+
+            if (nodes.length === 0) {
+                const nullPos = positions.get('EMPTY_NULL');
+                // Pfeile von head und tail auf nullptr
+                svgPaths += createSvgLine(nullPos.x + 4, nullPos.y - 28, nullPos.x + 20, nullPos.y - 4, '#34d399', 'arrow-head');
+                svgPaths += createSvgLine(nullPos.x + 62, nullPos.y - 28, nullPos.x + 46, nullPos.y - 4, '#c084fc', 'arrow-tail');
+            } else {
+                // Pfeile für head und tail Badges
+                if (headObj && positions.has(headObj.id)) {
+                    const hPos = positions.get(headObj.id);
+                    let offsetX = (headId === tailId) ? -34 : 0;
+                    if (stagingNode && stagingNode.positionHint === 'front') offsetX -= 36;
+                    const startX = hPos.x + hPos.w / 2 + offsetX;
+                    svgPaths += createSvgLine(startX, hPos.y - 28, startX, hPos.y - 4, '#34d399', 'arrow-head');
+                }
+                if (tailObj && positions.has(tailObj.id)) {
+                    const tPos = positions.get(tailObj.id);
+                    let offsetX = (headId === tailId) ? 34 : 0;
+                    if (stagingNode && stagingNode.positionHint === 'back') offsetX += 36;
+                    const startX = tPos.x + tPos.w / 2 + offsetX;
+                    svgPaths += createSvgLine(startX, tPos.y - 28, startX, tPos.y - 4, '#c084fc', 'arrow-tail');
+                }
+
+                // Zeiger (next & prev) für jeden Knoten zeichnen
+                allNodesToRender.forEach(node => {
+                    const pos = positions.get(node.id);
+                    if (!pos) return;
+
+                    // --- NEXT ZEIGER (Blau – startet im rechten Drittel / an der rechten Kante) ---
+                    if (node.nextId && positions.has(node.nextId)) {
+                        const targetPos = positions.get(node.nextId);
+                        if (Math.abs(pos.y - targetPos.y) < 10) {
+                            const idxA = nodes.findIndex(n => n.id === node.id);
+                            const idxB = nodes.findIndex(n => n.id === node.nextId);
+                            if (idxA !== -1 && idxB !== -1 && idxB - idxA > 1) {
+                                // Überspringender Bogen UNTEN (z. B. beim Löschen): unterhalb der Knoten entlang
+                                const x1 = pos.x + pos.w * 0.83;
+                                const y1 = pos.y + pos.h;
+                                const x2 = targetPos.x + targetPos.w * 0.17;
+                                const y2 = targetPos.y + targetPos.h + 4;
+                                const d = `M ${x1} ${y1} C ${x1} ${y1 + 48}, ${x2} ${y2 + 48}, ${x2} ${y2}`;
+                                svgPaths += `<path d="${d}" fill="none" stroke="#38bdf8" stroke-width="2.2" marker-end="url(#arrow-next)" class="svg-arrow" />`;
+                            } else {
+                                // Direkter horizontaler Nachbar-Pfeil (oben)
+                                const x1 = pos.x + pos.w;
+                                const y1 = pos.y + 32;
+                                const x2 = targetPos.x - 4;
+                                const y2 = targetPos.y + 32;
+                                svgPaths += createSvgLine(x1, y1, x2, y2, '#38bdf8', 'arrow-next');
+                            }
+                        } else {
+                            // Zwischen oberer Ebene (newNode) und unterer Ebene – komplett getrennte Rechts- & Links-Bahnen
+                            const isFromStaging = stagingNode && node.id === stagingNode.id;
+                            if (isFromStaging) {
+                                // 1. newNode->next (Blau, INNEN rechts): vom next-Feld (rechte Seite) direkt hinunter zur Oberkante von curr
+                                const x1 = pos.x + pos.w;
+                                const y1 = pos.y + 52;
+                                const x2 = targetPos.x + 28;
+                                const y2 = targetPos.y - 4;
+                                const d = `M ${x1} ${y1} C ${x1 + 32} ${y1}, ${x2} ${y2 - 44}, ${x2} ${y2}`;
+                                svgPaths += `<path d="${d}" fill="none" stroke="#38bdf8" stroke-width="2.2" marker-end="url(#arrow-next)" class="svg-arrow" />`;
+                            } else {
+                                // 2. prevNode->next (Blau, WEIT AUSSEN links): vom next-Feld von prevNode außen links hoch zur linken Seite von newNode
+                                const x1 = pos.x + pos.w * 0.83;
+                                const y1 = pos.y;
+                                const x2 = targetPos.x - 4;
+                                const y2 = targetPos.y + 26;
+                                const d = `M ${x1} ${y1} C ${x1 - 15} ${y1 - 88}, ${x2 - 68} ${y2}, ${x2} ${y2}`;
+                                svgPaths += `<path d="${d}" fill="none" stroke="#38bdf8" stroke-width="2.2" marker-end="url(#arrow-next)" class="svg-arrow" />`;
+                            }
+                        }
+                    } else if (!stagingNode || node.id !== stagingNode.id) {
+                        // Zeigt auf rechtes nullptr
+                        const rNull = positions.get('RIGHT_NULL');
+                        if (rNull && node.id === nodes[nodes.length - 1].id) {
+                            svgPaths += createSvgLine(pos.x + pos.w, pos.y + 46, rNull.x - 4, rNull.y + rNull.h / 2, '#64748b', 'arrow-null', true);
+                        }
+                    }
+
+                    // --- PREV ZEIGER (Amber / Orange – startet im linken Drittel / an der linken Kante) ---
+                    if (node.prevId && positions.has(node.prevId)) {
+                        const targetPos = positions.get(node.prevId);
+                        if (Math.abs(pos.y - targetPos.y) < 10) {
+                            const idxA = nodes.findIndex(n => n.id === node.id);
+                            const idxB = nodes.findIndex(n => n.id === node.prevId);
+                            if (idxA !== -1 && idxB !== -1 && idxA - idxB > 1) {
+                                // Überspringender Rückwärts-Bogen UNTEN (weiter außen als next, damit beide klar sichtbar bleiben)
+                                const x1 = pos.x + pos.w * 0.17;
+                                const y1 = pos.y + pos.h;
+                                const x2 = targetPos.x + targetPos.w * 0.83;
+                                const y2 = targetPos.y + targetPos.h + 4;
+                                const d = `M ${x1} ${y1} C ${x1} ${y1 + 68}, ${x2} ${y2 + 68}, ${x2} ${y2}`;
+                                svgPaths += `<path d="${d}" fill="none" stroke="#fbbf24" stroke-width="2.2" marker-end="url(#arrow-prev)" class="svg-arrow" />`;
+                            } else {
+                                // Direkter horizontaler Nachbar-Pfeil (unten)
+                                const x1 = pos.x;
+                                const y1 = pos.y + 58;
+                                const x2 = targetPos.x + targetPos.w + 4;
+                                const y2 = targetPos.y + 58;
+                                svgPaths += createSvgLine(x1, y1, x2, y2, '#fbbf24', 'arrow-prev');
+                            }
+                        } else {
+                            // Zwischen oberer Ebene (newNode) und unterer Ebene – komplett getrennte Links- & Rechts-Bahnen
+                            const isFromStaging = stagingNode && node.id === stagingNode.id;
+                            if (isFromStaging) {
+                                // 3. newNode->prev (Amber, INNEN links): vom prev-Feld (linke Seite) direkt hinunter zur Oberkante von prevNode
+                                const x1 = pos.x;
+                                const y1 = pos.y + 52;
+                                const x2 = targetPos.x + targetPos.w - 28;
+                                const y2 = targetPos.y - 4;
+                                const d = `M ${x1} ${y1} C ${x1 - 32} ${y1}, ${x2} ${y2 - 44}, ${x2} ${y2}`;
+                                svgPaths += `<path d="${d}" fill="none" stroke="#fbbf24" stroke-width="2.2" marker-end="url(#arrow-prev)" class="svg-arrow" />`;
+                            } else {
+                                // 4. curr->prev (Amber, WEIT AUSSEN rechts): vom prev-Feld von curr außen rechts hoch zur rechten Seite von newNode
+                                const x1 = pos.x + pos.w * 0.17;
+                                const y1 = pos.y;
+                                const x2 = targetPos.x + targetPos.w + 4;
+                                const y2 = targetPos.y + 26;
+                                const d = `M ${x1} ${y1} C ${x1 + 15} ${y1 - 88}, ${x2 + 68} ${y2}, ${x2} ${y2}`;
+                                svgPaths += `<path d="${d}" fill="none" stroke="#fbbf24" stroke-width="2.2" marker-end="url(#arrow-prev)" class="svg-arrow" />`;
+                            }
+                        }
+                    } else if (!stagingNode || node.id !== stagingNode.id) {
+                        // Zeigt auf linkes nullptr
+                        const lNull = positions.get('LEFT_NULL');
+                        if (lNull && node.id === nodes[0].id) {
+                            svgPaths += createSvgLine(pos.x, pos.y + 46, lNull.x + lNull.w + 4, lNull.y + lNull.h / 2, '#64748b', 'arrow-null', true);
+                        }
+                    }
+                });
+            }
+
+            arrowsLayer.innerHTML = svgPaths;
+        }
+
+        function renderPointerBadge(label, x, y, color) {
+            const styles = color === 'emerald'
+                ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300'
+                : 'bg-purple-500/20 border-purple-400 text-purple-300';
+            return `
+                <div style="left:${x}px; top:${y}px; width:56px;"
+                     class="overlay-item absolute text-center py-0.5 rounded-md border ${styles} font-mono text-xs font-bold shadow-md">
+                    ${label}
+                </div>
+            `;
+        }
+
+        function createSvgLine(x1, y1, x2, y2, color, markerId, dashed = false) {
+            const dashAttr = dashed ? 'stroke-dasharray="4 3"' : '';
+            return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="2.2" ${dashAttr} marker-end="url(#${markerId})" class="svg-arrow" />`;
+        }
+
+        /**
+         * ============================================================================
+         * 4. INTERAKTIVE LISTEN-OPERATIONEN (Schritt-für-Schritt animiert)
+         * ============================================================================
+         */
+
+        function getInputValue() {
+            const input = document.getElementById('nodeValueInput');
+            const val = parseInt(input.value, 10);
+            if (isNaN(val)) {
+                showToast('Bitte eine gültige Ganzzahl für val eingeben.');
+                return null;
+            }
+            return val;
+        }
+
+        function getIndexValue() {
+            const input = document.getElementById('nodeIndexInput');
+            const idx = parseInt(input.value, 10);
+            if (isNaN(idx) || idx < 0) {
+                showToast('Bitte einen gültigen Index >= 0 eingeben.');
+                return null;
+            }
+            return idx;
+        }
+
+        /**
+         * OPERATION 1: Am Anfang einfügen (insertFront / push_front)
+         */
+        async function handlePushFront() {
+            if (isAnimating) return;
+            if (nodes.length >= 7) {
+                showToast('Maximal 7 Knoten für optimale Übersichtlichkeit empfohlen.');
+                return;
+            }
+            const val = getInputValue();
+            if (val === null) return;
+
+            newlyInsertedNodeId = null;
+            setControlsDisabled(true);
+            document.getElementById('operationTitle').textContent = `Operation: insertFront(${val})`;
+
+            // Schritt 1: Neuen Knoten im Heap erstellen
+            const newNode = {
+                id: 'node_' + (idCounter++),
+                addr: allocateAddress(),
+                data: val,
+                prevId: null,
+                nextId: null,
+                positionHint: 'front'
+            };
+            stagingNode = newNode;
+            setStepInfo(
+                'Schritt 1/4',
+                `Neuen Knoten <code class="text-emerald-400 font-mono">newNode</code> mit Wert <strong>${val}</strong> im Speicher erstellen.`,
+                `new Node(${val}) reserviert Speicher an Adresse ${newNode.addr}. prev und next sind nullptr.`
+            );
+            renderVisualization();
+            await waitStep();
+
+            if (headId === null) {
+                // Sonderfall: Liste ist noch leer
+                nodes.push(newNode);
+                headId = newNode.id;
+                tailId = newNode.id;
+                stagingNode = null;
+                newlyInsertedNodeId = newNode.id;
+                setStepInfo(
+                    'Schritt 2/2',
+                    `Liste war leer (<code class="text-sky-400 font-mono">head == nullptr</code>): Sowohl <code class="text-emerald-400 font-mono">head</code> als auch <code class="text-purple-400 font-mono">tail</code> zeigen nun auf <code class="text-emerald-400 font-mono">newNode</code>.`,
+                    `head = tail = ${newNode.addr};`,
+                    'bg-emerald-400'
+                );
+                renderVisualization();
+                await waitStep();
+                newlyInsertedNodeId = null;
+                renderVisualization();
+            } else {
+                // Schritt 2: newNode->next = head
+                const oldHead = getNodeById(headId);
+                newNode.nextId = oldHead.id;
+                setStepInfo(
+                    'Schritt 2/4',
+                    `<code class="text-sky-400 font-mono">newNode->next</code> auf den aktuellen <code class="text-emerald-400 font-mono">head</code> (${oldHead.addr}) setzen.`,
+                    `Damit kennt der neue Knoten bereits seinen Nachfolger.`
+                );
+                renderVisualization();
+                await waitStep();
+
+                // Schritt 3: head->prev = newNode
+                oldHead.prevId = newNode.id;
+                setStepInfo(
+                    'Schritt 3/4',
+                    `Rückwärts-Zeiger <code class="text-amber-400 font-mono">head->prev</code> des bisherigen ersten Knotens auf <code class="text-emerald-400 font-mono">newNode</code> (${newNode.addr}) umhängen.`,
+                    `Jetzt sind beide Knoten in beide Richtungen miteinander verknüpft.`
+                );
+                renderVisualization();
+                await waitStep();
+
+                // Schritt 4: head = newNode (sanftes Einreihen in die Hauptkette)
+                nodes.unshift(newNode);
+                headId = newNode.id;
+                stagingNode = null;
+                newlyInsertedNodeId = newNode.id;
+                setStepInfo(
+                    'Schritt 4/4',
+                    `Den Listenanfang <code class="text-emerald-400 font-mono">head</code> auf <code class="text-emerald-400 font-mono">newNode</code> (${newNode.addr}) aktualisieren.`,
+                    `Einfügen am Anfang abgeschlossen! Zeitkomplexität: O(1).`,
+                    'bg-emerald-400'
+                );
+                renderVisualization();
+                await waitStep();
+                newlyInsertedNodeId = null;
+                renderVisualization();
+            }
+
+            document.getElementById('operationTitle').textContent = 'Abgeschlossen';
+            setControlsDisabled(false);
+        }
+
+        /**
+         * OPERATION 2: Am Ende einfügen (insertBack / push_back)
+         */
+        async function handlePushBack() {
+            if (isAnimating) return;
+            if (nodes.length >= 7) {
+                showToast('Maximal 7 Knoten für optimale Übersichtlichkeit empfohlen.');
+                return;
+            }
+            const val = getInputValue();
+            if (val === null) return;
+
+            newlyInsertedNodeId = null;
+            setControlsDisabled(true);
+            document.getElementById('operationTitle').textContent = `Operation: insertBack(${val})`;
+
+            // Schritt 1: Neuen Knoten erstellen
+            const newNode = {
+                id: 'node_' + (idCounter++),
+                addr: allocateAddress(),
+                data: val,
+                prevId: null,
+                nextId: null,
+                positionHint: 'back'
+            };
+            stagingNode = newNode;
+            setStepInfo(
+                'Schritt 1/4',
+                `Neuen Knoten <code class="text-emerald-400 font-mono">newNode</code> mit Wert <strong>${val}</strong> im Speicher erstellen.`,
+                `Adresse: ${newNode.addr} | prev = nullptr | next = nullptr`
+            );
+            renderVisualization();
+            await waitStep();
+
+            if (tailId === null) {
+                nodes.push(newNode);
+                headId = newNode.id;
+                tailId = newNode.id;
+                stagingNode = null;
+                newlyInsertedNodeId = newNode.id;
+                setStepInfo(
+                    'Schritt 2/2',
+                    `Liste war leer (<code class="text-purple-400 font-mono">tail == nullptr</code>): <code class="text-emerald-400 font-mono">head</code> und <code class="text-purple-400 font-mono">tail</code> zeigen auf <code class="text-emerald-400 font-mono">newNode</code>.`,
+                    `head = tail = ${newNode.addr};`,
+                    'bg-emerald-400'
+                );
+                renderVisualization();
+                await waitStep();
+                newlyInsertedNodeId = null;
+                renderVisualization();
+            } else {
+                // Schritt 2: newNode->prev = tail
+                const oldTail = getNodeById(tailId);
+                newNode.prevId = oldTail.id;
+                setStepInfo(
+                    'Schritt 2/4',
+                    `<code class="text-amber-400 font-mono">newNode->prev</code> auf den bisherigen <code class="text-purple-400 font-mono">tail</code> (${oldTail.addr}) setzen.`,
+                    `Der neue Knoten zeigt nun rückwärts auf das bisherige Listenende.`
+                );
+                renderVisualization();
+                await waitStep();
+
+                // Schritt 3: tail->next = newNode
+                oldTail.nextId = newNode.id;
+                setStepInfo(
+                    'Schritt 3/4',
+                    `<code class="text-sky-400 font-mono">tail->next</code> des bisherigen letzten Knotens auf <code class="text-emerald-400 font-mono">newNode</code> (${newNode.addr}) setzen.`,
+                    `Vorwärts-Verbindung vom alten Ende zum neuen Knoten hergestellt.`
+                );
+                renderVisualization();
+                await waitStep();
+
+                // Schritt 4: tail = newNode (sanftes Einreihen in die Hauptkette)
+                nodes.push(newNode);
+                tailId = newNode.id;
+                stagingNode = null;
+                newlyInsertedNodeId = newNode.id;
+                setStepInfo(
+                    'Schritt 4/4',
+                    `Den Endzeiger <code class="text-purple-400 font-mono">tail</code> auf <code class="text-emerald-400 font-mono">newNode</code> (${newNode.addr}) aktualisieren.`,
+                    `Einfügen am Ende abgeschlossen! Dank tail-Zeiger in O(1) ohne Schleife.`,
+                    'bg-emerald-400'
+                );
+                renderVisualization();
+                await waitStep();
+                newlyInsertedNodeId = null;
+                renderVisualization();
+            }
+
+            document.getElementById('operationTitle').textContent = 'Abgeschlossen';
+            setControlsDisabled(false);
+        }
+
+        /**
+         * OPERATION 2B: An beliebiger Position / Index einfügen (insertAt)
+         */
+        async function handleInsertAt() {
+            if (isAnimating) return;
+            if (nodes.length >= 7) {
+                showToast('Maximal 7 Knoten für optimale Übersichtlichkeit empfohlen.');
+                return;
+            }
+            const val = getInputValue();
+            if (val === null) return;
+            const index = getIndexValue();
+            if (index === null) return;
+
+            newlyInsertedNodeId = null;
+
+            // Sonderfall 1: Index 0 oder leere Liste -> Delegiert an insertFront
+            if (index === 0 || nodes.length === 0) {
+                setControlsDisabled(true);
+                document.getElementById('operationTitle').textContent = `Operation: insertAt(${index}, ${val})`;
+                setStepInfo(
+                    'Sonderfall',
+                    `Da <code class="text-indigo-300 font-mono">index == 0</code> (oder Liste leer), wird direkt <code class="text-emerald-400 font-mono">insertFront(${val})</code> aufgerufen.`,
+                    'Einfügen am Anfang in O(1).'
+                );
+                await waitStep();
+                setControlsDisabled(false);
+                await handlePushFront();
+                return;
+            }
+
+            // Sonderfall 2: Index >= Listenlänge -> Delegiert an insertBack
+            if (index >= nodes.length) {
+                setControlsDisabled(true);
+                document.getElementById('operationTitle').textContent = `Operation: insertAt(${index}, ${val})`;
+                setStepInfo(
+                    'Sonderfall',
+                    `Index <strong>${index}</strong> liegt am/hinter dem Listenende (Länge ${nodes.length}): Delegiere an <code class="text-sky-400 font-mono">insertBack(${val})</code>.`,
+                    'curr erreicht nullptr nach dem Durchlauf.'
+                );
+                await waitStep();
+                setControlsDisabled(false);
+                await handlePushBack();
+                return;
+            }
+
+            // Hauptfall: Einfügen in der Mitte (0 < index < nodes.length)
+            setControlsDisabled(true);
+            document.getElementById('operationTitle').textContent = `Operation: insertAt(${index}, ${val})`;
+
+            // Schritt 1: Traversieren bis zur Zielposition index
+            let curr = getNodeById(headId);
+            highlightedNodeId = curr.id;
+            pointerLabel = { nodeId: curr.id, name: 'curr (i=0)' };
+            setStepInfo(
+                'Traversieren',
+                `Starte bei <code class="text-emerald-400 font-mono">curr = head</code> (${curr.addr}). Laufe bis Index <strong>${index}</strong>.`,
+                `Aktuelle Position: i = 0 (Wert ${curr.data})`
+            );
+            renderVisualization();
+            await waitStep();
+
+            for (let i = 0; i < index; i++) {
+                curr = getNodeById(curr.nextId);
+                highlightedNodeId = curr.id;
+                pointerLabel = { nodeId: curr.id, name: `curr (i=${i + 1})` };
+                setStepInfo(
+                    'Traversieren',
+                    `Schritt ${i + 1}/${index}: Folge <code class="text-sky-400 font-mono">curr = curr->next</code> zu <strong>${curr.addr}</strong> (Wert ${curr.data}).`,
+                    i + 1 === index
+                        ? `Zielposition index=${index} erreicht! Der neue Knoten wird direkt VOR curr eingefügt.`
+                        : `Weiter bis i == ${index}...`
+                );
+                renderVisualization();
+                await waitStep();
+            }
+
+            const prevNode = getNodeById(curr.prevId);
+
+            // Schritt 2: Neuen Knoten im Speicher allokieren
+            const newNode = {
+                id: 'node_' + (idCounter++),
+                addr: allocateAddress(),
+                data: val,
+                prevId: null,
+                nextId: null,
+                positionHint: 'middle',
+                targetIndex: index
+            };
+            stagingNode = newNode;
+            setStepInfo(
+                'Schritt 1/6',
+                `Erstelle <code class="text-emerald-400 font-mono">newNode</code> mit Wert <strong>${val}</strong> an Adresse <strong>${newNode.addr}</strong>.`,
+                `Wird zwischen ${prevNode.addr} (data=${prevNode.data}) und ${curr.addr} (data=${curr.data}) eingehängt.`
+            );
+            renderVisualization();
+            await waitStep();
+
+            // Schritt 3: newNode->prev = curr->prev
+            newNode.prevId = prevNode.id;
+            setStepInfo(
+                'Schritt 2/6',
+                `<code class="text-amber-400 font-mono">newNode->prev</code> auf den Vorgänger <code class="text-amber-400 font-mono">curr->prev</code> (${prevNode.addr}) setzen.`,
+                `newNode->prev = curr->prev;`
+            );
+            renderVisualization();
+            await waitStep();
+
+            // Schritt 4: newNode->next = curr
+            newNode.nextId = curr.id;
+            setStepInfo(
+                'Schritt 3/6',
+                `<code class="text-sky-400 font-mono">newNode->next</code> auf <code class="text-sky-400 font-mono">curr</code> (${curr.addr}) setzen.`,
+                `newNode kennt nun beide Nachbarn (${prevNode.addr} ⇄ newNode ⇄ ${curr.addr}).`
+            );
+            renderVisualization();
+            await waitStep();
+
+            // Schritt 5: curr->prev->next = newNode
+            prevNode.nextId = newNode.id;
+            setStepInfo(
+                'Schritt 4/6',
+                `Vorgänger-Zeiger <code class="text-sky-400 font-mono">curr->prev->next</code> (${prevNode.addr}) auf <code class="text-emerald-400 font-mono">newNode</code> (${newNode.addr}) umbiegen.`,
+                `curr->prev->next = newNode;`
+            );
+            renderVisualization();
+            await waitStep();
+
+            // Schritt 6: curr->prev = newNode (alle 4 Zeiger sind nun verbunden, newNode schwebt noch sichtbar oben)
+            curr.prevId = newNode.id;
+            setStepInfo(
+                'Schritt 5/6',
+                `<code class="text-amber-400 font-mono">curr->prev</code> (${curr.addr}) auf <code class="text-emerald-400 font-mono">newNode</code> (${newNode.addr}) setzen.`,
+                `Alle 4 Zeiger sind jetzt umgehängt – im nächsten Schritt reiht sich der Knoten in die Liste ein.`
+            );
+            renderVisualization();
+            await waitStep();
+
+            // Schritt 7: Knoten gleitet sanft an seine Position in der Hauptkette
+            nodes.splice(index, 0, newNode);
+            stagingNode = null;
+            highlightedNodeId = null;
+            newlyInsertedNodeId = newNode.id;
+            pointerLabel = null;
+            setStepInfo(
+                'Schritt 6/6',
+                `Knoten <strong>${val}</strong> (${newNode.addr}) ist an Position <strong>[${index}]</strong> eingereiht!`,
+                `Einfügen in der Mitte abgeschlossen.`,
+                'bg-emerald-400'
+            );
+            renderVisualization();
+            await waitStep();
+
+            newlyInsertedNodeId = null;
+            renderVisualization();
+            document.getElementById('operationTitle').textContent = 'Abgeschlossen';
+            setControlsDisabled(false);
+        }
+
+        /**
+         * OPERATION 3: Knoten löschen anhand eines Wertes (deleteNode)
+         */
+        async function handleDeleteNode() {
+            if (isAnimating) return;
+            if (nodes.length === 0) {
+                showToast('Die Liste ist bereits leer.');
+                return;
+            }
+            const val = getInputValue();
+            if (val === null) return;
+
+            newlyInsertedNodeId = null;
+            setControlsDisabled(true);
+            document.getElementById('operationTitle').textContent = `Operation: deleteNode(${val})`;
+
+            // Schritt 1: Suche ab head starten
+            let curr = getNodeById(headId);
+            highlightedNodeId = curr.id;
+            pointerLabel = { nodeId: curr.id, name: 'curr' };
+            setStepInfo(
+                'Suche',
+                `Starte Suche bei <code class="text-emerald-400 font-mono">head</code> (${curr.addr}). Prüfe ob <code class="text-sky-400 font-mono">curr->data == ${val}</code>.`,
+                `Aktueller Wert: ${curr.data}`
+            );
+            renderVisualization();
+            await waitStep();
+
+            while (curr !== null && curr.data !== val) {
+                const nextNode = getNodeById(curr.nextId);
+                setStepInfo(
+                    'Suche',
+                    `Wert <strong>${curr.data}</strong> ≠ ${val}. Gehe weiter über <code class="text-sky-400 font-mono">curr = curr->next</code>.`,
+                    nextNode ? `Nächste Adresse: ${nextNode.addr}` : 'Ende der Liste erreicht (nullptr).'
+                );
+                curr = nextNode;
+                highlightedNodeId = curr ? curr.id : null;
+                pointerLabel = curr ? { nodeId: curr.id, name: 'curr' } : null;
+                renderVisualization();
+                await waitStep();
+            }
+
+            // Nicht gefunden
+            if (curr === null) {
+                setStepInfo(
+                    'Abbruch',
+                    `Wert <strong>${val}</strong> wurde in der Liste nicht gefunden (<code class="text-slate-400 font-mono">curr == nullptr</code>).`,
+                    'Keine Änderung an der Liste vorgenommen.',
+                    'bg-amber-400'
+                );
+                document.getElementById('operationTitle').textContent = 'Abgeschlossen';
+                setControlsDisabled(false);
+                return;
+            }
+
+            // Gefunden! Knoten rot markieren
+            highlightedNodeId = null;
+            dangerNodeId = curr.id;
+            const prevNode = getNodeById(curr.prevId);
+            const nextNode = getNodeById(curr.nextId);
+
+            setStepInfo(
+                'Gefunden',
+                `Knoten mit Wert <strong>${val}</strong> an Adresse <code class="text-rose-400 font-mono">${curr.addr}</code> gefunden! Jetzt werden die Nachbarn umgehängt.`,
+                `Vorgänger: ${prevNode ? prevNode.addr : 'nullptr'} | Nachfolger: ${nextNode ? nextNode.addr : 'nullptr'}`,
+                'bg-rose-500'
+            );
+            renderVisualization();
+            await waitStep();
+
+            // Vorgänger-Zeiger umhängen
+            if (prevNode !== null) {
+                prevNode.nextId = curr.nextId;
+                setStepInfo(
+                    'Zeiger-Tausch 1',
+                    `<code class="text-sky-400 font-mono">curr->prev->next</code> (${prevNode.addr}) überspringt nun <code class="text-rose-400 font-mono">curr</code> und zeigt auf <code class="text-sky-400 font-mono">${nextNode ? nextNode.addr : 'nullptr'}</code>.`,
+                    `curr->prev->next = curr->next;`
+                );
+            } else {
+                headId = curr.nextId;
+                setStepInfo(
+                    'Zeiger-Tausch 1',
+                    `Der gelöschte Knoten war <code class="text-emerald-400 font-mono">head</code>. Verschiebe <code class="text-emerald-400 font-mono">head</code> auf <code class="text-sky-400 font-mono">${nextNode ? nextNode.addr : 'nullptr'}</code>.`,
+                    `head = curr->next;`
+                );
+            }
+            renderVisualization();
+            await waitStep();
+
+            // Nachfolger-Zeiger umhängen
+            if (nextNode !== null) {
+                nextNode.prevId = curr.prevId;
+                setStepInfo(
+                    'Zeiger-Tausch 2',
+                    `<code class="text-amber-400 font-mono">curr->next->prev</code> (${nextNode.addr}) zeigt nun rückwärts auf <code class="text-amber-400 font-mono">${prevNode ? prevNode.addr : 'nullptr'}</code>.`,
+                    `curr->next->prev = curr->prev;`
+                );
+            } else {
+                tailId = curr.prevId;
+                setStepInfo(
+                    'Zeiger-Tausch 2',
+                    `Der gelöschte Knoten war <code class="text-purple-400 font-mono">tail</code>. Verschiebe <code class="text-purple-400 font-mono">tail</code> auf <code class="text-amber-400 font-mono">${prevNode ? prevNode.addr : 'nullptr'}</code>.`,
+                    `tail = curr->prev;`
+                );
+            }
+            renderVisualization();
+            await waitStep();
+
+            // Speicher freigeben (delete curr)
+            nodes = nodes.filter(n => n.id !== curr.id);
+            dangerNodeId = null;
+            pointerLabel = null;
+            setStepInfo(
+                'Speicher frei',
+                `<code class="text-rose-400 font-mono">delete curr;</code> gibt den Speicher an Adresse <strong>${curr.addr}</strong> wieder frei.`,
+                `Knoten vollständig aus der doppelt verketteten Liste entfernt.`,
+                'bg-emerald-400'
+            );
+            renderVisualization();
+
+            document.getElementById('operationTitle').textContent = 'Abgeschlossen';
+            setControlsDisabled(false);
+        }
+
+        /**
+         * OPERATION 4: Vorwärts durchlaufen (head -> tail)
+         */
+        async function handleTraverseForward() {
+            if (isAnimating) return;
+            if (nodes.length === 0) {
+                showToast('Die Liste ist leer – nichts zu durchlaufen.');
+                return;
+            }
+
+            newlyInsertedNodeId = null;
+            setControlsDisabled(true);
+            document.getElementById('operationTitle').textContent = 'Operation: traverseForward()';
+
+            let curr = getNodeById(headId);
+            let output = [];
+
+            setStepInfo(
+                'Start',
+                `Setze Laufzeiger <code class="text-sky-400 font-mono">curr = head</code> (${curr.addr}).`,
+                'Wir folgen nun Schritt für Schritt den next-Zeigern.'
+            );
+            highlightedNodeId = curr.id;
+            pointerLabel = { nodeId: curr.id, name: 'curr' };
+            renderVisualization();
+            await waitStep();
+
+            while (curr !== null) {
+                output.push(curr.data);
+                setStepInfo(
+                    'Ausgabe',
+                    `Lese <code class="text-sky-400 font-mono">curr->data</code>: <strong>${curr.data}</strong> (Adresse ${curr.addr}).`,
+                    `Konsolenausgabe: [ ${output.join(' -> ')} ]`
+                );
+                renderVisualization();
+                await waitStep();
+
+                curr = getNodeById(curr.nextId);
+                highlightedNodeId = curr ? curr.id : null;
+                pointerLabel = curr ? { nodeId: curr.id, name: 'curr' } : null;
+
+                if (curr) {
+                    setStepInfo(
+                        'Weiter',
+                        `Folge <code class="text-sky-400 font-mono">curr = curr->next</code> zu Adresse <strong>${curr.addr}</strong>.`,
+                        `Konsolenausgabe: [ ${output.join(' -> ')} ]`
+                    );
+                    renderVisualization();
+                    await waitStep();
+                }
+            }
+
+            setStepInfo(
+                'Fertig',
+                `<code class="text-sky-400 font-mono">curr == nullptr</code> erreicht. Vorwärts-Durchlauf beendet!`,
+                `Gesamte Ausgabe: ${output.join(' → ')}`,
+                'bg-emerald-400'
+            );
+            renderVisualization();
+
+            document.getElementById('operationTitle').textContent = 'Abgeschlossen';
+            setControlsDisabled(false);
+        }
+
+        /**
+         * OPERATION 5: Rückwärts durchlaufen (tail -> head)
+         */
+        async function handleTraverseBackward() {
+            if (isAnimating) return;
+            if (nodes.length === 0) {
+                showToast('Die Liste ist leer – nichts zu durchlaufen.');
+                return;
+            }
+
+            newlyInsertedNodeId = null;
+            setControlsDisabled(true);
+            document.getElementById('operationTitle').textContent = 'Operation: traverseBackward()';
+
+            let curr = getNodeById(tailId);
+            let output = [];
+
+            setStepInfo(
+                'Start',
+                `Setze Laufzeiger <code class="text-amber-400 font-mono">curr = tail</code> (${curr.addr}).`,
+                'Der Vorteil der doppelt verketteten Liste: Wir können direkt vom Ende starten!'
+            );
+            highlightedNodeId = curr.id;
+            pointerLabel = { nodeId: curr.id, name: 'curr' };
+            renderVisualization();
+            await waitStep();
+
+            while (curr !== null) {
+                output.push(curr.data);
+                setStepInfo(
+                    'Ausgabe',
+                    `Lese <code class="text-amber-400 font-mono">curr->data</code>: <strong>${curr.data}</strong> (Adresse ${curr.addr}).`,
+                    `Konsolenausgabe: [ ${output.join(' <- ')} ]`
+                );
+                renderVisualization();
+                await waitStep();
+
+                curr = getNodeById(curr.prevId);
+                highlightedNodeId = curr ? curr.id : null;
+                pointerLabel = curr ? { nodeId: curr.id, name: 'curr' } : null;
+
+                if (curr) {
+                    setStepInfo(
+                        'Zurück',
+                        `Folge <code class="text-amber-400 font-mono">curr = curr->prev</code> zu Adresse <strong>${curr.addr}</strong>.`,
+                        `Konsolenausgabe: [ ${output.join(' <- ')} ]`
+                    );
+                    renderVisualization();
+                    await waitStep();
+                }
+            }
+
+            setStepInfo(
+                'Fertig',
+                `<code class="text-amber-400 font-mono">curr == nullptr</code> am Anfang erreicht. Rückwärts-Durchlauf beendet!`,
+                `Gesamte Ausgabe: ${output.join(' ← ')}`,
+                'bg-emerald-400'
+            );
+            renderVisualization();
+
+            document.getElementById('operationTitle').textContent = 'Abgeschlossen';
+            setControlsDisabled(false);
+        }
+
+        /**
+         * Setzt die Liste auf ein anschauliches Beispiel [10, 25, 30] zurück
+         */
+        function resetDemo() {
+            if (isAnimating) return;
+
+            nextMemCounter = 0x100;
+            idCounter = 1;
+            stagingNode = null;
+            newlyInsertedNodeId = null;
+            highlightedNodeId = null;
+            dangerNodeId = null;
+            pointerLabel = null;
+
+            const idxInput = document.getElementById('nodeIndexInput');
+            if (idxInput) idxInput.value = '1';
+
+            const n1 = { id: 'node_' + (idCounter++), addr: allocateAddress(), data: 10, prevId: null, nextId: null };
+            const n2 = { id: 'node_' + (idCounter++), addr: allocateAddress(), data: 25, prevId: null, nextId: null };
+            const n3 = { id: 'node_' + (idCounter++), addr: allocateAddress(), data: 30, prevId: null, nextId: null };
+
+            n1.nextId = n2.id;
+            n2.prevId = n1.id;
+            n2.nextId = n3.id;
+            n3.prevId = n2.id;
+
+            nodes = [n1, n2, n3];
+            headId = n1.id;
+            tailId = n3.id;
+
+            document.getElementById('operationTitle').textContent = 'Bereit für Operation';
+            setStepInfo(
+                'BEREIT',
+                'Beispielliste mit 3 Knoten (<code class="text-white font-mono">10 ⇄ 25 ⇄ 30</code>) geladen. Wähle oben eine Aktion oder füge über <code class="text-indigo-300 font-mono">+ Position</code> einen Knoten in der Mitte ein.',
+                'Jeder Knoten kennt über prev und next seine direkten Nachbarn im Speicher.',
+                'bg-emerald-400'
+            );
+            renderVisualization();
+        }
+
+        // Responsive Neuzeichnung bei Fenstergrößenänderung
+        window.addEventListener('resize', () => {
+            renderVisualization();
+        });
+
+        // Initialisierung beim Laden der Seite
+        window.onload = function() {
+            resetDemo();
+        };
+    </script>
+</body>
+</html>
